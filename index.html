@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ניהול חנות טבק וסיגריות</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<section id="login" class="login"><section class="login-card"><section class="brand-mark">CS</section><h1>חנות סיגריות</h1><p>מערכת ניהול למנהל</p><label>שם משתמש<input id="user" autocomplete="username" placeholder="admin"></label><label>סיסמה<input id="pass" type="password" autocomplete="current-password" placeholder="••••••••"></label><button id="loginBtn" class="primary full">כניסה</button><small id="loginMsg"></small><section class="demo">דוגמה: <b>admin</b> / <b>admin123</b></section></section></section>
+<section id="app" hidden>
+<aside class="sidebar"><section class="side-brand"><section class="brand-mark small">CS</section><section><b>חנות סיגריות</b><span>לוח ניהול</span></section></section><nav id="sideNav"><button class="active" data-page="dashboard"><span>⌂</span>לוח בקרה</button><button data-page="inventory"><span>▦</span>מלאי</button><button data-page="orders"><span>＋</span>הזמנה חדשה</button><button data-page="history"><span>▤</span>היסטוריית הזמנות</button><button data-page="reports"><span>◒</span>דוחות</button><button data-page="movements"><span>↕</span>תנועות מלאי</button></nav><section class="side-bottom"><button id="loadDemo" class="ghost">טען נתוני דוגמה</button><button id="logout" class="ghost danger-text">↪ התנתקות</button></section></aside>
+<main class="content"><header class="topbar"><section><span class="eyebrow">מנהל / <span id="pageName">לוח בקרה</span></span><h1 id="pageTitle">לוח בקרה</h1></section><section class="top-actions"><span class="api-dot"><i></i> Mock API</span><span class="date" id="todayDate"></span></section>
+    <label class="language-control" for="language-select">
+      שפה
+      <select id="language-select" aria-label="שפה">
+        <option value="en">English</option>
+        <option value="he">עברית</option>
+      </select>
+    </label>
+
+</header>
+<section id="dashboard" class="page"><section class="stats"><article><span>סה״כ מוצרים</span><strong id="sProducts">0</strong><small>מוצרים פעילים</small></article><article><span>סה״כ מלאי</span><strong id="sUnits">0</strong><small>יחידות במלאי</small></article><article><span>עלות המלאי</span><strong id="sCost">₪0.00</strong><small>שווי רכישה</small></article><article><span>מכירות היום</span><strong id="sSales">₪0.00</strong><small id="sOrders">0 orders</small></article><article><span>Today's profit</span><strong id="sProfit">₪0.00</strong><small>לאחר הנחות</small></article><article><span>מלאי נמוך</span><strong id="sLow">0</strong><small>דורש טיפול</small></article></section><section class="dash-grid"><section class="panel"><section class="panel-head"><section><h2>מלאי נמוך</h2><p>מוצרים שהמלאי שלהם ברמה המינימלית או מתחתיה</p></section><button class="link-btn" data-page="inventory">צפה במלאי →</button></section><section id="lowStockList" class="list"></section></section><section class="panel"><section class="panel-head"><section><h2>הזמנות אחרונות</h2><p>המכירות האחרונות שהושלמו</p></section><button class="link-btn" data-page="history">צפה בהכול →</button></section><section id="recentOrders" class="list"></section></section></section></section>
+<section id="inventory" class="page" hidden><section class="page-tools"><section><h2>מלאי / מחסן</h2><p>ניהול מוצרים, כמויות ומחירים.</p></section><section class="tools-right"><input id="search" placeholder="חיפוש לפי מוצר או מותג…"><button id="addProduct" class="primary">＋ הוסף מוצר</button></section></section><section class="table-card"><table><thead><tr><th class="image-column">תמונה</th><th>מוצר</th><th>Type</th><th>עלות רכישה</th><th>מחיר מכירה</th><th>כמות</th><th>שווי מלאי</th><th>סטטוס</th><th>פעולות</th></tr></thead><tbody id="productRows"></tbody></table></section></section>
+<section id="orders" class="page" hidden>
+<section id="new-order-customer" class="card">
+  <section class="customer-picker-head">
+    <section>
+      <span class="eyebrow">לקוח להזמנה</span>
+      <h3>למי מיועדת ההזמנה?</h3>
+      <p>בחר לקוח קיים או צור לקוח חדש.</p>
+    </section>
+    <button id="add-customer-from-order" class="primary" type="button">＋ הוסף לקוח</button>
+  </section>
+  <label for="order-customer">לקוח</label>
+  <select id="order-customer">
+    <option value="">לקוח מזדמן / ללא לקוח</option>
+  </select>
+  <section id="selected-customer-info" class="selected-customer" aria-live="polite">לא נבחר לקוח.</section>
+</section><section class="page-tools"><section><h2>הזמנה חדשה</h2><p>יצירת מכירה והפחתת המלאי באופן אוטומטי.</p></section><button id="clearCart" class="outline">נקה הזמנה</button></section><section class="order-layout"><section class="panel"><section class="order-add"><select id="orderProduct"></select><input id="orderQty" type="number" min="1" value="1"><button id="addToCart" class="primary">הוסף להזמנה</button></section><section id="cart" class="cart"></section></section><section class="panel summary"><h3>סיכום הזמנה</h3><section class="summary-row"><span>סכום ביניים</span><b id="subtotal">₪0.00</b></section><label class="discount">הנחה <input id="discount" type="number" min="0" step="0.01" value="0"></label><section class="summary-row total-row"><span>סה״כ</span><b id="total">₪0.00</b></section><section class="summary-row"><span>עלות</span><b id="orderCost">₪0.00</b></section><section class="summary-row profit-row"><span>רווח</span><b id="profit">₪0.00</b></section><button id="completeOrder" class="primary full">השלם הזמנה והדפס קבלה</button></section></section></section>
+<section id="history" class="page" hidden><section class="page-tools"><section><h2>היסטוריית הזמנות</h2><p>הזמנות שהושלמו והרווח שחושב.</p></section><input id="orderSearch" placeholder="חיפוש לפי מספר הזמנה…"></section><section class="table-card"><table><thead><tr><th>הזמנה</th><th>תאריך</th><th>פריטים</th><th>Subtotal</th><th>הנחה</th><th>Total</th><th>Profit</th><th></th></tr></thead><tbody id="orderRows"></tbody></table></section></section>
+<section id="reports" class="page" hidden><section class="page-tools"><section><h2>דוחות</h2><p>סקירת מכירות ורווחים.</p></section></section><section class="stats report-stats"><article><span>סה״כ מכירות</span><strong id="rSales">₪0.00</strong></article><article><span>סה״כ רווח</span><strong id="rProfit">₪0.00</strong></article><article><span>הזמנות</span><strong id="rOrders">0</strong></article><article><span>ממוצע להזמנה</span><strong id="rAvg">₪0.00</strong></article></section><section class="panel"><section class="panel-head"><section><h2>המוצרים הנמכרים ביותר</h2><p>יחידות שנמכרו בהזמנות שהושלמו</p></section></section><section id="bestSellers" class="list"></section></section></section>
+<section id="movements" class="page" hidden><section class="page-tools"><section><h2>תנועות מלאי</h2><p>כל שינוי במלאי שנרשם במערכת.</p></section></section><section class="table-card"><table><thead><tr><th>תאריך</th><th >מוצר</th><th>Change</th><th>Reason</th></tr></thead><tbody id="movementRows"></tbody></table></section></section>
+<section id="receipt" class="page" hidden><section class="page-tools"><section><h2>קבלה</h2><p>הדפסת ההזמנה האחרונה שהושלמה.</p></section><button id="printLast" class="primary">הדפס קבלה</button></section><section id="receiptBox" class="receipt"></section></section>
+
+
+
+</main></section>
+<dialog id="customerDialog" class="customer-dialog">
+  <form id="customerForm" method="dialog">
+    <section class="dialog-head">
+      <section>
+        <span class="eyebrow">לקוח</span>
+        <h2>הוספת לקוח</h2>
+        <p>הזן את פרטי הלקוח.</p>
+      </section>
+      <button type="button" id="cancelCustomerX" class="x">×</button>
+    </section>
+    <section class="customer-form-grid">
+      <label class="customer-name-field">שם הלקוח <span>*</span>
+        <input id="customer-name" required autocomplete="name" placeholder="e.g. John Smith">
+      </label>
+      <label>מספר טלפון
+        <input id="customer-phone" type="tel" autocomplete="tel" placeholder="e.g. 050-1234567">
+      </label>
+      <label class="customer-notes-field">הערות
+        <textarea id="customer-notes" rows="4" placeholder="הערות אופציונליות על הלקוח..."></textarea>
+      </label>
+    </section>
+    <section class="actions customer-actions">
+      <button type="button" id="cancelCustomer" class="outline">ביטול</button>
+      <button type="submit" id="saveCustomer" class="primary">שמירת לקוח</button>
+    </section>
+  </form>
+</dialog>
+
+<dialog id="productDialog"><form id="productForm"><section class="dialog-head"><section><h2>מוצר</h2><p>הוספה או עריכה של מוצר במלאי.</p></section><button type="button" id="cancelProduct" class="x">×</button></section><input id="pId" type="hidden"><section class="product-image-area"><section class="product-image-preview-wrap"><img id="pImagePreview" class="product-image-preview" alt="Product preview" hidden><section id="pImagePlaceholder" class="product-image-placeholder">📦<small>תמונת מוצר</small></section></section><section class="product-image-upload"><label class="upload-label" for="pImage">תמונת המוצר</label><input id="pImage" type="file" accept="image/jpeg,image/png,image/webp"><small>בחר תמונה קטנה של המוצר. JPG, PNG או WEBP.</small></section></section><section class="form-grid"><label>שם המוצר<input id="pName" required placeholder="Marlboro Red"></label><label>Brand<input id="pBrand" placeholder="Marlboro"></label><label>Type<select id="pType" required><option value="">בחר סוג</option><option value="Cigarettes">Cigarettes</option><option value="Tobacco">Tobacco</option><option value="Hookah / Argileh">Hookah / Argileh</option><option value="Shisha / Molasses">Shisha / Molasses</option><option value="Accessories">Accessories</option><option value="Other">Other</option></select></label><label>גרסה<input id="pVariant" placeholder="Red / Blue / 20s / Carton"></label><label>ספק<input id="pSupplier" placeholder="ספק name"></label><label>עלות רכישה<input id="pBuy" required type="number" min="0" step=".01" placeholder="8.50"></label><label>מחיר מכירה<input id="pSell" required type="number" min="0" step=".01" placeholder="12.00"></label><label>Quantity<input id="pQty" required type="number" min="0" step="1" placeholder="50"></label><label>מלאי מינימלי<input id="pMin" required type="number" min="0" step="1" value="5"></label></section><section class="actions"><button type="button" id="cancelProduct2" class="outline">ביטול</button><button class="primary">שמירת מוצר</button></section></form></dialog>
+<script src="mock-api.js"></script><script src="app.js"></script>
+
+</body></html>
