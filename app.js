@@ -42,13 +42,13 @@ const pages = {
 };
 
 async function refresh() {
-  db.products = await MockAPI.get('products');
-  db.orders = await MockAPI.get('orders');
-  db.stockMovements = await MockAPI.get('stockMovements');
-  db.payments = await MockAPI.get('payments');
-  db.lastReceipt = await MockAPI.get('lastReceipt');
+  db.products = await API.get('products');
+  db.orders = await API.get('orders');
+  db.stockMovements = await API.get('stockMovements');
+  db.payments = await API.get('payments');
+  db.lastReceipt = await API.get('lastReceipt');
   if (window.renderOrderCustomers) await window.renderOrderCustomers();
-  try { db._customersCache = await MockAPI.get('customers'); } catch {}
+  try { db._customersCache = await API.get('customers'); } catch {}
   render();
 }
 
@@ -60,15 +60,36 @@ async function login() {
     return;
   }
   try {
-    const valid = await MockAPI.login(email, password);
-    if (!valid) {
-      $('loginMsg').textContent = 'Incorrect email, password, or admin access.';
-      return;
+    const client = window.supabaseClient;
+    if (!client?.auth || typeof client.auth.signInWithPassword !== 'function') {
+      throw new Error('Supabase is not connected. Check your internet connection and refresh the page.');
     }
+
+    const { data, error } = await client.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) throw error;
+    if (!data?.user) throw new Error('Login failed: no user was returned.');
+
+    const { data: profile, error: profileError } = await client
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileError) throw profileError;
+    if (profile?.role !== 'admin') {
+      await client.auth.signOut();
+      throw new Error('Admin access required.');
+    }
+
     sessionStorage.setItem(AUTH_KEY, '1');
     await showApp();
   } catch (error) {
-    $('loginMsg').textContent = error.message || 'Login failed.';
+    console.error('Login failed:', error);
+    $('loginMsg').textContent = error?.message || 'Login failed.';
   }
 }
 
@@ -276,7 +297,7 @@ function renderCustomerAccounts() {
 
 async function loadCustomerAccounts() {
   try {
-    db._customersCache = await MockAPI.get('customers');
+    db._customersCache = await API.get('customers');
     renderCustomerAccounts();
   } catch (error) { console.error(error); }
 }
@@ -303,7 +324,7 @@ async function saveCustomerPayment(){
   const note=$('paymentNote').value.trim();
   if(!customerId || amount<=0){ alert('Enter a valid payment amount.'); return; }
   try{
-    await MockAPI.post('payments',{customerId,amount,note});
+    await API.post('payments',{customerId,amount,note});
     closePaymentDialog();
     await refresh();
     await loadCustomerAccounts();
@@ -609,14 +630,14 @@ async function saveProduct(event) {
   }
 
   if (id) {
-    await MockAPI.put('products', id, product);
+    await API.put('products', id, product);
   } else {
     // Save the entered quantity exactly once. The previous version saved qty
     // on the product and then added the same qty again via stock movement.
     const initialQty = product.qty;
-    const created = await MockAPI.post('products', { ...product, qty: 0 });
+    const created = await API.post('products', { ...product, qty: 0 });
     if (initialQty > 0) {
-      await MockAPI.patchProductStock(created.id, initialQty, 'Initial stock');
+      await API.patchProductStock(created.id, initialQty, 'Initial stock');
     }
   }
 
@@ -630,7 +651,7 @@ async function deleteProduct(id) {
 
   if (!confirm(`Delete ${product.name}?`)) return;
 
-  await MockAPI.delete('products', id);
+  await API.delete('products', id);
   cart = cart.filter((item) => item.id !== id);
   await refresh();
 }
@@ -708,7 +729,7 @@ async function completeOrder() {
   };
 
   try {
-    const orderNumber = await MockAPI.completeOrder(order);
+    const orderNumber = await API.completeOrder(order);
     cart = [];
     $('discount').value = 0;
 
@@ -734,7 +755,7 @@ function viewReceipt(id) {
 async function loadDemoData() {
   if (!confirm('Load demo products? This only works when inventory is empty.')) return;
 
-  const loaded = await MockAPI.seedDemo();
+  const loaded = await API.seedDemo();
 
   if (!loaded) {
     alert('Demo data already exists.');
@@ -786,7 +807,7 @@ function init() {
   });
 
   $('logout').addEventListener('click', async () => {
-    await MockAPI.logout();
+    await API.logout();
     sessionStorage.removeItem(AUTH_KEY);
     location.reload();
   });
@@ -814,14 +835,16 @@ function init() {
   $('backupImport')?.addEventListener('click', () => $('backupFile')?.click());
   $('backupFile')?.addEventListener('change', importBackup);
 
-  supabase.auth.getSession().then(async ({ data }) => {
-    if (data.session) {
-      sessionStorage.setItem(AUTH_KEY, '1');
-      await showApp();
-    } else {
-      sessionStorage.removeItem(AUTH_KEY);
-    }
-  }).catch(() => {});
+  if (window.supabaseClient?.auth) {
+    window.supabaseClient.auth.getSession().then(async ({ data }) => {
+      if (data.session) {
+        sessionStorage.setItem(AUTH_KEY, '1');
+        await showApp();
+      } else {
+        sessionStorage.removeItem(AUTH_KEY);
+      }
+    }).catch(() => {});
+  }
 }
 
 // Backup & Restore — saves the app's local data into a portable JSON file.
@@ -1076,7 +1099,7 @@ function hasDuplicateProduct(data, candidate, currentId = "") {
     const select = $('order-customer');
     if (!select) return;
     try {
-      const customers = await MockAPI.get('customers');
+      const customers = await API.get('customers');
       const current = select.value;
       select.innerHTML = '<option value="">Walk-in / No customer</option>' +
         customers.map((customer) =>
@@ -1093,7 +1116,7 @@ function hasDuplicateProduct(data, candidate, currentId = "") {
     const id = $('order-customer')?.value || '';
     if (!id) return null;
     try {
-      const customers = await MockAPI.get('customers');
+      const customers = await API.get('customers');
       return customers.find((customer) => String(customer.id) === String(id)) || null;
     } catch {
       return null;
@@ -1138,7 +1161,7 @@ function hasDuplicateProduct(data, candidate, currentId = "") {
     }
 
     try {
-      const customer = await MockAPI.post('customers', {
+      const customer = await API.post('customers', {
         name,
         phone: $('customer-phone')?.value.trim() || '',
         notes: $('customer-notes')?.value.trim() || ''
