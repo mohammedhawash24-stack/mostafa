@@ -250,7 +250,7 @@ const MockAPI = (() => {
   async function login(email, password) {
     const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
     if (error || !data.session) return false;
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await window.supabaseClient
       .from('profiles').select('role').eq('id', data.user.id).single();
     if (profileError || profile?.role !== 'admin') {
       await window.supabaseClient.auth.signOut();

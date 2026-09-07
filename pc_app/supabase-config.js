@@ -8,3 +8,7 @@ if (!window.supabase || typeof window.supabase.createClient !== 'function') {
 }
 
 window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+if (!window.supabaseClient.auth || typeof window.supabaseClient.auth.signInWithPassword !== 'function') {
+  throw new Error('Supabase Auth failed to initialize. Please refresh the page.');
+}
