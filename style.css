@@ -319,6 +319,52 @@ button {
   color:var(--muted);
   margin-top:3px;
 }
+
+.profit-filters { display:flex; gap:12px; flex-wrap:wrap; align-items:end; margin: 0 0 14px; }
+.profit-filters label { display:flex; flex-direction:column; gap:6px; min-width:170px; font-size:12px; font-weight:700; }
+.profit-filters select { border:1px solid var(--border, #ddd); border-radius:10px; padding:10px 12px; background:var(--card, #fff); }
+.profit-month-summary { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; margin-bottom:14px; border:1px solid var(--border, #e5e7eb); border-radius:12px; background:var(--muted, #f8fafc); }
+.profit-month-summary b { font-size:18px; }
+.daily-profit-panel {
+  margin-top:16px;
+}
+.daily-profit-panel > .panel-head > strong {
+  font-size:20px;
+}
+.daily-profit-chart {
+  display:grid;
+  gap:10px;
+}
+.daily-profit-row {
+  display:grid;
+  grid-template-columns:72px 1fr 150px;
+  align-items:center;
+  gap:14px;
+}
+.daily-profit-date b,.daily-profit-date small,.daily-profit-value b,.daily-profit-value small {
+  display:block;
+}
+.daily-profit-date small,.daily-profit-value small {
+  color:var(--muted);
+  font-size:11px;
+  margin-top:2px;
+}
+.daily-profit-value {
+  text-align:right;
+}
+.daily-profit-track {
+  height:14px;
+  background:#eef2f7;
+  border-radius:999px;
+  overflow:hidden;
+}
+.daily-profit-bar {
+  display:block;
+  height:100%;
+  background:var(--blue);
+  border-radius:999px;
+  min-width:0;
+}
 .low-num {
   color:var(--red);
   font-weight:700;
@@ -567,6 +613,10 @@ dialog::backdrop {
   .dash-grid {
     grid-template-columns:1fr;
   }
+  .daily-profit-row {
+    grid-template-columns:60px 1fr 120px;
+    gap:8px;
+  }
 }
 @media(max-width:760px) {
   .sidebar {
@@ -763,88 +813,10 @@ html[dir="rtl"] table th, html[dir="rtl"] table td { text-align: right; }
 html[dir="rtl"] .row-actions, html[dir="rtl"] .actions { flex-direction: row-reverse; }
 html[dir="rtl"] .customer-picker-head { flex-direction: row-reverse; }
 
-/* Small product thumbnails for quick visual identification. */
-.image-column,
-.product-image-cell {
-  width:64px;
-  text-align:center;
-}
-.product-image-cell {
-  padding:8px 10px;
-}
-.product-thumb,
-.product-thumb-placeholder {
-  width:42px;
-  height:42px;
-  border-radius:8px;
-  object-fit:contain;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  background:#f4f6f8;
-  border:1px solid var(--line);
-  vertical-align:middle;
-}
-.product-thumb-placeholder {
-  font-size:20px;
-}
-.product-image-area {
-  display:flex;
-  align-items:center;
-  gap:18px;
-  padding:20px 24px 0;
-  direction:ltr;
-}
-.product-image-preview-wrap {
-  width:110px;
-  height:110px;
-  flex:0 0 110px;
-  border:1px solid var(--line);
-  border-radius:12px;
-  background:#fafbfc;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
-}
-.product-image-preview {
-  width:100%;
-  height:100%;
-  object-fit:contain;
-}
-.product-image-placeholder {
-  width:100%;
-  height:100%;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
-  color:var(--muted);
-  font-size:26px;
-}
-.product-image-placeholder small {
-  font-size:11px;
-}
-.product-image-upload {
-  display:grid;
-  gap:7px;
-  text-align:left;
-  direction:rtl;
-}
-.product-image-upload input[type="file"] {
-  max-width:290px;
-  padding:8px;
-}
-.product-image-upload small {
-  color:var(--muted);
-  font-size:11px;
-}
-.upload-label {
-  font-size:12px;
-  font-weight:700;
-}
-@media (max-width:700px) {
-  .product-image-area { align-items:flex-start; }
-  .product-image-preview-wrap { width:88px; height:88px; flex-basis:88px; }
-}
+
+/* Customer credit / payment account UI */
+.account-summary{display:flex;align-items:center;gap:14px;padding:18px 22px;margin-bottom:18px;border:1px solid var(--line,#e5e7eb);border-radius:16px;background:var(--panel,#fff)}
+.account-summary b{font-size:28px}.account-summary span{font-weight:700}.account-summary small{color:#6b7280}
+#customerAccountRows td small{display:block;color:#6b7280;margin-top:3px}.due-positive{color:#b42318}.paid-positive{color:#067647}.small-btn{padding:8px 12px}
+.payment-balance{display:flex;justify-content:space-between;align-items:center;padding:16px;border-radius:12px;background:#f5f7fa;margin:14px 0 18px}.payment-balance b{font-size:24px}
+#paymentDialog label{display:flex;flex-direction:column;gap:7px;margin:12px 0}#paymentDialog input,#paymentDialog textarea{width:100%;box-sizing:border-box}

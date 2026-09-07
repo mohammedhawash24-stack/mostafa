@@ -9,6 +9,7 @@ let db = {
   products: [],
   orders: [],
   stockMovements: [],
+  payments: [],
   lastReceipt: null,
 };
 
@@ -29,35 +30,6 @@ const escapeHtml = (value) => String(value ?? '').replace(
   }[character]),
 );
 
-async function resizeProductImage(file) {
-  if (!file) return '';
-  if (!file.type.startsWith('image/')) throw new Error('Please choose an image file.');
-  const bitmap = await createImageBitmap(file);
-  const maxSize = 160;
-  const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return canvas.toDataURL('image/jpeg', 0.82);
-}
-
-function setProductImagePreview(src) {
-  const image = $('pImagePreview');
-  const placeholder = $('pImagePlaceholder');
-  if (src) {
-    image.src = src;
-    image.hidden = false;
-    placeholder.hidden = true;
-  } else {
-    image.removeAttribute('src');
-    image.hidden = true;
-    placeholder.hidden = false;
-  }
-}
-
 const pages = {
   dashboard: ['לוח בקרה', 'לוח בקרה'],
   inventory: ['מלאי / מחסן', 'מלאי'],
@@ -65,6 +37,7 @@ const pages = {
   history: ['היסטוריית הזמנות', 'היסטוריית הזמנות'],
   reports: ['דוחות', 'דוחות'],
   movements: ['תנועות מלאי', 'תנועות מלאי'],
+  accounts: ['חשבונות לקוחות', 'חשבונות לקוחות'],
   receipt: ['קבלה', 'קבלה'],
 };
 
@@ -72,29 +45,44 @@ async function refresh() {
   db.products = await MockAPI.get('products');
   db.orders = await MockAPI.get('orders');
   db.stockMovements = await MockAPI.get('stockMovements');
+  db.payments = await MockAPI.get('payments');
   db.lastReceipt = await MockAPI.get('lastReceipt');
+  if (window.renderOrderCustomers) await window.renderOrderCustomers();
+  try { db._customersCache = await MockAPI.get('customers'); } catch {}
   render();
 }
 
 async function login() {
-  const username = $('user').value.trim();
+  const email = $('user').value.trim();
   const password = $('pass').value;
-  const valid = await MockAPI.login(username, password);
-
-  if (!valid) {
-    $('loginMsg').textContent = 'שם המשתמש או הסיסמה שגויים.';
+  if (!email || !password) {
+    $('loginMsg').textContent = 'Enter your email and password.';
     return;
   }
-
-  sessionStorage.setItem(AUTH_KEY, '1');
-  showApp();
+  try {
+    const valid = await MockAPI.login(email, password);
+    if (!valid) {
+      $('loginMsg').textContent = 'Incorrect email, password, or admin access.';
+      return;
+    }
+    sessionStorage.setItem(AUTH_KEY, '1');
+    await showApp();
+  } catch (error) {
+    $('loginMsg').textContent = error.message || 'Login failed.';
+  }
 }
 
 async function showApp() {
   $('login').hidden = true;
   $('app').hidden = false;
   $('todayDate').textContent = new Date().toLocaleDateString();
-  await refresh();
+  try {
+    await refresh();
+  } catch (error) {
+    $('login').hidden = false;
+    $('app').hidden = true;
+    $('loginMsg').textContent = error.message || 'Could not load Supabase data.';
+  }
 }
 
 function go(page) {
@@ -121,6 +109,7 @@ function render() {
   renderHistory();
   renderReports();
   renderMovements();
+  renderCustomerAccounts();
   renderReceipt();
 }
 
@@ -154,7 +143,175 @@ function renderStats() {
   ).length;
 }
 
+function renderDailyProfit() {
+  const chart = $('dailyProfitChart');
+  const totalEl = $('dailyProfitTotal');
+  const monthSelect = $('profitMonth');
+  const daysSelect = $('profitDays');
+  const monthTotalEl = $('dailyProfitMonthTotal');
+  const monthLabelEl = $('dailyProfitMonthLabel');
+  const subtitleEl = $('dailyProfitSubtitle');
+  if (!chart || !totalEl || !monthSelect || !daysSelect) return;
+
+  const now = new Date();
+  const keyOf = (date) => {
+    const d = new Date(date);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const monthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const lang = window.currentLanguage || localStorage.getItem('cigarette_shop_language') || 'he';
+  const locale = lang === 'he' ? 'he-IL' : 'en-US';
+
+  // Build a month selector for the current month + previous 11 months.
+  const currentMonth = monthKey(now);
+  if (!monthSelect.dataset.ready) {
+    const months = [];
+    for (let i = 0; i < 12; i += 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({ key: monthKey(d), label: d.toLocaleDateString(locale, { month: 'long', year: 'numeric' }) });
+    }
+    monthSelect.innerHTML = months.map(m => `<option value="${m.key}">${m.label}</option>`).join('');
+    monthSelect.value = currentMonth;
+    monthSelect.dataset.ready = '1';
+  } else {
+    const selected = monthSelect.value || currentMonth;
+    const options = [];
+    for (let i = 0; i < 12; i += 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      options.push({ key: monthKey(d), label: d.toLocaleDateString(locale, { month: 'long', year: 'numeric' }) });
+    }
+    monthSelect.innerHTML = options.map(m => `<option value="${m.key}">${m.label}</option>`).join('');
+    monthSelect.value = options.some(m => m.key === selected) ? selected : currentMonth;
+  }
+
+  const selectedKey = monthSelect.value || currentMonth;
+  const [year, month] = selectedKey.split('-').map(Number);
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 0);
+  monthEnd.setHours(0, 0, 0, 0);
+  const isCurrentMonth = selectedKey === currentMonth;
+  const lastDay = isCurrentMonth ? now.getDate() : monthEnd.getDate();
+  const requested = daysSelect.value === 'all' ? monthEnd.getDate() : Number(daysSelect.value || 30);
+  const dayCount = Math.min(requested, lastDay);
+  const firstDayNumber = Math.max(1, lastDay - dayCount + 1);
+
+  const totals = [];
+  for (let dayNumber = firstDayNumber; dayNumber <= lastDay; dayNumber += 1) {
+    const day = new Date(year, month - 1, dayNumber);
+    const key = keyOf(day);
+    const orders = db.orders.filter(order => keyOf(order.date) === key);
+    totals.push({
+      day,
+      profit: orders.reduce((sum, order) => sum + Number(order.profit || 0), 0),
+      sales: orders.reduce((sum, order) => sum + Number(order.total || 0), 0),
+      orders: orders.length,
+    });
+  }
+
+  // Monthly total always covers the whole selected month (or month-to-date for the current month).
+  const monthOrders = db.orders.filter(order => {
+    const d = new Date(order.date);
+    return !Number.isNaN(d.getTime()) && monthKey(d) === selectedKey;
+  });
+  const monthProfit = monthOrders.reduce((sum, order) => sum + Number(order.profit || 0), 0);
+  const visibleProfit = totals.reduce((sum, item) => sum + item.profit, 0);
+  totalEl.textContent = money(visibleProfit);
+  if (monthTotalEl) monthTotalEl.textContent = money(monthProfit);
+  if (monthLabelEl) monthLabelEl.textContent = isCurrentMonth
+    ? (lang === 'he' ? 'רווח החודש עד היום' : 'Month-to-date profit')
+    : (lang === 'he' ? 'רווח החודש' : 'Selected month profit');
+  if (subtitleEl) subtitleEl.textContent = lang === 'he'
+    ? `רווח יומי — ${dayCount} ימים אחרונים בחודש שנבחר.`
+    : `Daily profit — last ${dayCount} days in the selected month.`;
+
+  const maxProfit = Math.max(1, ...totals.map(item => item.profit));
+  chart.innerHTML = totals.map(item => {
+    const width = item.profit > 0 ? Math.max(4, (item.profit / maxProfit) * 100) : 0;
+    const label = item.day.toLocaleDateString(locale, { weekday: 'short' });
+    const date = item.day.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
+    return `
+      <article class="daily-profit-row">
+        <section class="daily-profit-date"><b>${label}</b><small>${date}</small></section>
+        <section class="daily-profit-track" title="${money(item.profit)} · ${item.orders} orders">
+          <span class="daily-profit-bar" style="width:${width}%"></span>
+        </section>
+        <section class="daily-profit-value"><b>${money(item.profit)}</b><small>${money(item.sales)} sales · ${item.orders}</small></section>
+      </article>`;
+  }).join('') || '<p class="empty">No days to display.</p>';
+}
+
+function renderCustomerAccounts() {
+  const body = $('customerAccountRows');
+  const summary = $('customerAccountSummary');
+  if (!body) return;
+  const customers = db._customersCache || [];
+  const ordersBy = {};
+  db.orders.forEach((order) => {
+    if (!order.customerId) return;
+    (ordersBy[order.customerId] ||= []).push(order);
+  });
+  const paidBy = {};
+  db.payments.forEach((payment) => {
+    paidBy[payment.customerId] = (paidBy[payment.customerId] || 0) + Number(payment.amount || 0);
+  });
+  const rows = customers.map((customer) => {
+    const orders = ordersBy[customer.id] || [];
+    const charged = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const paid = paidBy[customer.id] || 0;
+    const due = Math.max(0, charged - paid);
+    return { customer, charged, paid, due, orders };
+  }).sort((a,b) => b.due - a.due || a.customer.name.localeCompare(b.customer.name));
+  const totalDue = rows.reduce((s,r)=>s+r.due,0);
+  const totalCharged = rows.reduce((s,r)=>s+r.charged,0);
+  if (summary) summary.innerHTML = `<b>${money(totalDue)}</b><span>total outstanding</span><small>${money(totalCharged)} total customer sales</small>`;
+  body.innerHTML = rows.length ? rows.map(({customer,charged,paid,due,orders}) => `
+    <tr>
+      <td><b>${escapeHtml(customer.name)}</b><small>${escapeHtml(customer.phone || '')}</small></td>
+      <td>${orders.length}</td><td>${money(charged)}</td><td>${money(paid)}</td>
+      <td><b class="${due > 0 ? 'due-positive' : 'paid-positive'}">${money(due)}</b></td>
+      <td><button class="outline small-btn" data-action="customer-payment" data-id="${escapeHtml(customer.id)}">＋ Payment</button></td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">No customers yet.</td></tr>';
+}
+
+async function loadCustomerAccounts() {
+  try {
+    db._customersCache = await MockAPI.get('customers');
+    renderCustomerAccounts();
+  } catch (error) { console.error(error); }
+}
+
+function openPaymentDialog(customerId) {
+  const customer = (db._customersCache || []).find(c => String(c.id) === String(customerId));
+  if (!customer) return;
+  $('paymentCustomerId').value = customer.id;
+  $('paymentCustomerName').textContent = customer.name;
+  const orders = db.orders.filter(o => String(o.customerId) === String(customer.id));
+  const charged = orders.reduce((s,o)=>s+Number(o.total||0),0);
+  const paid = db.payments.filter(p=>String(p.customerId)===String(customer.id)).reduce((s,p)=>s+Number(p.amount||0),0);
+  $('paymentOutstanding').textContent = money(Math.max(0, charged-paid));
+  $('paymentAmount').value = '';
+  $('paymentNote').value = '';
+  const d=$('paymentDialog'); if (d.showModal) d.showModal(); else d.setAttribute('open','');
+}
+
+function closePaymentDialog(){ const d=$('paymentDialog'); if(d?.open) d.close(); }
+
+async function saveCustomerPayment(){
+  const customerId=$('paymentCustomerId').value;
+  const amount=Number($('paymentAmount').value);
+  const note=$('paymentNote').value.trim();
+  if(!customerId || amount<=0){ alert('Enter a valid payment amount.'); return; }
+  try{
+    await MockAPI.post('payments',{customerId,amount,note});
+    closePaymentDialog();
+    await refresh();
+    await loadCustomerAccounts();
+  }catch(error){ alert(error.message || 'Could not record payment.'); }
+}
+
 function renderDashboard() {
+  renderDailyProfit();
   const lowStock = [...db.products]
     .filter((product) => Number(product.qty) <= Number(product.min))
     .sort((a, b) => Number(a.qty) - Number(b.qty));
@@ -210,7 +367,6 @@ function renderProducts() {
 
         return `
           <tr>
-            <td class="product-image-cell">${product.image ? `<img class="product-thumb" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}">` : '<span class="product-thumb-placeholder">📦</span>'}</td>
             <td class="product-name">
               <b>${escapeHtml(product.name)}</b>
               <small>${escapeHtml(product.brand || '')}</small>
@@ -230,7 +386,7 @@ function renderProducts() {
           </tr>
         `;
       }).join('')
-    : '<tr><td colspan="9" class="empty">No products found.</td></tr>';
+    : '<tr><td colspan="8" class="empty">No products found.</td></tr>';
 }
 
 function renderSelect() {
@@ -268,15 +424,12 @@ function renderCart() {
   $('cart').innerHTML = cart.length
     ? cart.map((item, index) => `
         <article class="cartitem">
-          <section class="cartitem-main">
+          <section>
             <b>${escapeHtml(item.name)}</b>
-            <small>${item.qty} ×</small>
-            <label class="order-price-field">Price for this order
-              <input class="cart-price-input" data-index="${index}" type="number" min="0" step="0.01" value="${Number(item.sell).toFixed(2)}" aria-label="Price for this order">
-            </label>
+            <small>${item.qty} × ${money(item.sell)}</small>
           </section>
           <b class="price">${money(item.qty * item.sell)}</b>
-          <button class="icon-btn" data-action="remove-cart" data-index="${index}" type="button">×</button>
+          <button class="icon-btn" data-action="remove-cart" data-index="${index}">×</button>
         </article>
       `).join('')
     : '<p class="empty">No products in this order.</p>';
@@ -403,8 +556,6 @@ function resetProductForm() {
   $('productForm').reset();
   $('pId').value = '';
   $('pMin').value = 5;
-  $('pImage').value = '';
-  setProductImagePreview('');
 }
 
 function openProductDialog(product = null) {
@@ -421,7 +572,6 @@ function openProductDialog(product = null) {
     $('pSell').value = product.sell;
     $('pQty').value = product.qty;
     $('pMin').value = product.min;
-    setProductImagePreview(product.image || '');
   }
 
   $('productDialog').showModal();
@@ -435,18 +585,8 @@ async function saveProduct(event) {
   event.preventDefault();
 
   const id = Number($('pId').value);
-  const existingProduct = id ? db.products.find((item) => item.id === id) : null;
-  let image = existingProduct?.image || '';
-
-  try {
-    if ($('pImage').files[0]) image = await resizeProductImage($('pImage').files[0]);
-  } catch (error) {
-    alert(error.message || 'Could not read the product image.');
-    return;
-  }
-
   const product = {
-    id: id || Date.now(),
+    id: id || '',
     name: $('pName').value.trim(),
     brand: $('pBrand').value.trim(),
     type: $('pType').value,
@@ -456,11 +596,15 @@ async function saveProduct(event) {
     sell: Number($('pSell').value),
     qty: Number($('pQty').value),
     min: Number($('pMin').value),
-    image,
   };
 
   if (!product.name || !Number.isFinite(product.buy) || !Number.isFinite(product.sell)) {
     alert('Please complete the required product fields.');
+    return;
+  }
+
+  if (hasDuplicateProduct(db, product, id)) {
+    alert('This product already exists. Use Add Stock instead of creating a duplicate.');
     return;
   }
 
@@ -470,9 +614,9 @@ async function saveProduct(event) {
     // Save the entered quantity exactly once. The previous version saved qty
     // on the product and then added the same qty again via stock movement.
     const initialQty = product.qty;
-    await MockAPI.post('products', { ...product, qty: 0 });
+    const created = await MockAPI.post('products', { ...product, qty: 0 });
     if (initialQty > 0) {
-      await MockAPI.patchProductStock(product.id, initialQty, 'Initial stock');
+      await MockAPI.patchProductStock(created.id, initialQty, 'Initial stock');
     }
   }
 
@@ -481,7 +625,7 @@ async function saveProduct(event) {
 }
 
 async function deleteProduct(id) {
-  const product = db.products.find((item) => item.id === id);
+  const product = db.products.find((item) => String(item.id) === String(id));
   if (!product) return;
 
   if (!confirm(`Delete ${product.name}?`)) return;
@@ -493,7 +637,7 @@ async function deleteProduct(id) {
 
 function addToCart() {
   const product = db.products.find(
-    (item) => item.id === Number($('orderProduct').value),
+    (item) => String(item.id) === String($('orderProduct').value),
   );
 
   const quantity = Number($('orderQty').value);
@@ -517,10 +661,6 @@ function addToCart() {
 function clearCart() {
   cart = [];
   $('discount').value = 0;
-  if ($('order-customer')) {
-    $('order-customer').value = '';
-    window.showSelectedCustomer?.();
-  }
   renderCart();
 }
 
@@ -554,6 +694,7 @@ async function completeOrder() {
     customerId: selectedCustomer?.id || "",
     customerName: selectedCustomer?.name || "Walk-in / No customer",
     items: cart.map((item) => ({
+      productId: item.id,
       name: item.name,
       qty: item.qty,
       buy: item.buy,
@@ -567,21 +708,17 @@ async function completeOrder() {
   };
 
   try {
-    for (const item of cart) {
-      await MockAPI.patchProductStock(item.id, -item.qty, `Sale ${order.id}`);
-    }
-
-    await MockAPI.post('orders', order);
-    await MockAPI.setLastReceipt(order);
-
+    const orderNumber = await MockAPI.completeOrder(order);
     cart = [];
     $('discount').value = 0;
 
     await refresh();
+    const savedOrder = db.orders.find((entry) => String(entry.id) === String(orderNumber));
+    if (savedOrder) db.lastReceipt = savedOrder;
     go('receipt');
     setTimeout(() => window.print(), 250);
   } catch (error) {
-    alert(error.message);
+    alert(error.message || 'Could not complete order.');
   }
 }
 
@@ -619,13 +756,15 @@ function handleClick(event) {
 
   const { action, id, index } = actionButton.dataset;
 
+  if (action === 'customer-payment') { openPaymentDialog(id); return; }
+
   if (action === 'edit-product') {
-    const product = db.products.find((item) => item.id === Number(id));
+    const product = db.products.find((item) => String(item.id) === String(id));
     if (product) openProductDialog(product);
   }
 
   if (action === 'delete-product') {
-    deleteProduct(Number(id));
+    deleteProduct(id);
   }
 
   if (action === 'remove-cart') {
@@ -646,42 +785,24 @@ function init() {
     if (event.key === 'Enter') login();
   });
 
-  $('logout').addEventListener('click', () => {
+  $('logout').addEventListener('click', async () => {
+    await MockAPI.logout();
     sessionStorage.removeItem(AUTH_KEY);
     location.reload();
   });
 
   $('search').addEventListener('input', renderProducts);
   $('orderSearch').addEventListener('input', renderHistory);
+  $('paymentForm')?.addEventListener('submit', (e) => { e.preventDefault(); saveCustomerPayment(); });
+  $('cancelPayment')?.addEventListener('click', closePaymentDialog);
+  $('cancelPaymentX')?.addEventListener('click', closePaymentDialog);
+  $('paymentDialog')?.addEventListener('click', (e) => { if (e.target.id === 'paymentDialog') closePaymentDialog(); });
+  $('sideNav')?.addEventListener('click', () => { if ($('accounts') && !$('accounts').hidden) loadCustomerAccounts(); });
   $('discount').addEventListener('input', renderCart);
-  document.addEventListener('input', (event) => {
-    const input = event.target.closest('.cart-price-input');
-    if (!input) return;
-    const index = Number(input.dataset.index);
-    if (!cart[index]) return;
-    const value = Number(input.value);
-    cart[index].sell = Number.isFinite(value) && value >= 0 ? value : 0;
-    renderCart();
-    const refreshed = document.querySelectorAll('.cart-price-input')[index];
-    if (refreshed) { refreshed.focus(); refreshed.setSelectionRange(refreshed.value.length, refreshed.value.length); }
-  });
 
   $('addProduct').addEventListener('click', () => openProductDialog());
   $('cancelProduct').addEventListener('click', closeProductDialog);
   $('cancelProduct2').addEventListener('click', closeProductDialog);
-  $('pImage').addEventListener('change', async () => {
-    const file = $('pImage').files[0];
-    if (!file) return;
-    try {
-      const preview = await resizeProductImage(file);
-      setProductImagePreview(preview);
-    } catch (error) {
-      $('pImage').value = '';
-      setProductImagePreview('');
-      alert(error.message || 'Could not read the product image.');
-    }
-  });
-
   $('productForm').addEventListener('submit', saveProduct);
 
   $('addToCart').addEventListener('click', addToCart);
@@ -689,11 +810,81 @@ function init() {
   $('completeOrder').addEventListener('click', completeOrder);
   $('printLast').addEventListener('click', () => window.print());
   $('loadDemo').addEventListener('click', loadDemoData);
+  $('backupExport')?.addEventListener('click', exportBackup);
+  $('backupImport')?.addEventListener('click', () => $('backupFile')?.click());
+  $('backupFile')?.addEventListener('change', importBackup);
 
-  if (sessionStorage.getItem(AUTH_KEY) === '1') {
-    showApp();
+  supabase.auth.getSession().then(async ({ data }) => {
+    if (data.session) {
+      sessionStorage.setItem(AUTH_KEY, '1');
+      await showApp();
+    } else {
+      sessionStorage.removeItem(AUTH_KEY);
+    }
+  }).catch(() => {});
+}
+
+// Backup & Restore — saves the app's local data into a portable JSON file.
+function getBackupData() {
+  const keys = ['cigarette_mock_api_v2', 'cig_admin_v1', 'cigarette_shop_language'];
+  const data = {};
+  keys.forEach((key) => {
+    const value = localStorage.getItem(key);
+    if (value !== null) {
+      try { data[key] = JSON.parse(value); } catch { data[key] = value; }
+    }
+  });
+  return data;
+}
+
+function exportBackup() {
+  try {
+    const payload = {
+      app: 'Tobacco & Cigarette Shop Manager',
+      version: 2,
+      createdAt: new Date().toISOString(),
+      data: getBackupData()
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `TobaccoShop_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    alert(error.message || 'Could not create backup.');
   }
 }
+
+async function importBackup(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  try {
+    const payload = JSON.parse(await file.text());
+    if (!payload || payload.app !== 'Tobacco & Cigarette Shop Manager' || !payload.data) {
+      throw new Error('Invalid backup file.');
+    }
+    const allowedKeys = ['cigarette_mock_api_v2', 'cig_admin_v1', 'cigarette_shop_language'];
+    const hasData = allowedKeys.some((key) => Object.prototype.hasOwnProperty.call(payload.data, key));
+    if (!hasData) throw new Error('Backup contains no app data.');
+    if (!confirm('Restore this backup? Current app data will be replaced.')) return;
+    allowedKeys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(payload.data, key)) {
+        const value = payload.data[key];
+        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+      }
+    });
+    alert('Backup restored successfully.');
+    location.reload();
+  } catch (error) {
+    alert(error.message || 'Could not restore backup.');
+  }
+}
+
 
 init();
 
@@ -877,126 +1068,110 @@ function hasDuplicateProduct(data, candidate, currentId = "") {
 
 
 
-/* Customers + New Order customer selector */
+/* Customers + New Order customer selector — stored in Supabase. */
 (function () {
-  const STORAGE_KEY = "cig_admin_v1";
   const $ = (id) => document.getElementById(id);
 
-  function data() {
+  async function renderCustomers() {
+    const select = $('order-customer');
+    if (!select) return;
     try {
-      const value = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      return value && typeof value === "object" ? value : {};
-    } catch {
-      return {};
+      const customers = await MockAPI.get('customers');
+      const current = select.value;
+      select.innerHTML = '<option value="">Walk-in / No customer</option>' +
+        customers.map((customer) =>
+          `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.name)}${customer.phone ? ` — ${escapeHtml(customer.phone)}` : ''}</option>`
+        ).join('');
+      if (customers.some((customer) => String(customer.id) === String(current))) select.value = current;
+      showCustomerInfo();
+    } catch (error) {
+      console.error('Could not load customers:', error);
     }
   }
 
-  function save(value) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-  }
-
-  function ensureCustomers() {
-    const value = data();
-    value.customers ||= [];
-    return value;
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
-    }[char]));
-  }
-
-  function renderCustomers() {
-    const select = $("order-customer");
-    if (!select) return;
-
-    const value = ensureCustomers();
-    const current = select.value;
-    select.innerHTML = '<option value="">Walk-in / No customer</option>' +
-      value.customers.map((customer) =>
-        `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.name)}${customer.phone ? ` — ${escapeHtml(customer.phone)}` : ""}</option>`
-      ).join("");
-
-    if (value.customers.some((customer) => customer.id === current)) select.value = current;
-    showCustomerInfo();
-  }
-
-  function getSelectedCustomer() {
-    const id = $("order-customer")?.value || "";
+  async function getSelectedCustomer() {
+    const id = $('order-customer')?.value || '';
     if (!id) return null;
-    return ensureCustomers().customers.find((customer) => customer.id === id) || null;
+    try {
+      const customers = await MockAPI.get('customers');
+      return customers.find((customer) => String(customer.id) === String(id)) || null;
+    } catch {
+      return null;
+    }
   }
 
   function showCustomerInfo() {
-    const info = $("selected-customer-info");
+    const info = $('selected-customer-info');
     if (!info) return;
-    const customer = getSelectedCustomer();
-    if (!customer) {
+    const id = $('order-customer')?.value || '';
+    if (!id) {
       info.innerHTML = '<span class="customer-dot"></span><span>No customer selected — this will be a walk-in order.</span>';
       return;
     }
-    info.innerHTML = `<span class="customer-dot"></span><section><b>${escapeHtml(customer.name)}</b>${customer.phone ? `<small>${escapeHtml(customer.phone)}</small>` : ""}</section>`;
+    const option = $('order-customer')?.selectedOptions?.[0];
+    info.innerHTML = `<span class="customer-dot"></span><section><b>${escapeHtml(option?.textContent?.split(' — ')[0] || '')}</b></section>`;
   }
 
   function openCustomerDialog() {
-    const dialog = $("customerDialog");
+    const dialog = $('customerDialog');
     if (!dialog) return;
-    $("customerForm")?.reset();
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
-    setTimeout(() => $("customer-name")?.focus(), 50);
+    $('customerForm')?.reset();
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+    setTimeout(() => $('customer-name')?.focus(), 50);
   }
 
   function closeCustomerDialog() {
-    const dialog = $("customerDialog");
+    const dialog = $('customerDialog');
     if (!dialog) return;
-    if (typeof dialog.close === "function" && dialog.open) dialog.close();
-    else dialog.removeAttribute("open");
+    if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+    else dialog.removeAttribute('open');
   }
 
-  function addCustomer(event) {
+  async function addCustomer(event) {
     event?.preventDefault();
-    const nameInput = $("customer-name");
-    const phoneInput = $("customer-phone");
-    const notesInput = $("customer-notes");
-    const name = nameInput?.value.trim() || "";
+    const nameInput = $('customer-name');
+    const name = nameInput?.value.trim() || '';
     if (!name) {
       nameInput?.focus();
       return;
     }
 
-    const value = ensureCustomers();
-    const customer = {
-      id: crypto.randomUUID(),
-      name,
-      phone: phoneInput?.value.trim() || "",
-      notes: notesInput?.value.trim() || "",
-      createdAt: new Date().toISOString()
-    };
-
-    value.customers.push(customer);
-    save(value);
-    closeCustomerDialog();
-    renderCustomers();
-    $("order-customer").value = customer.id;
-    showCustomerInfo();
+    try {
+      const customer = await MockAPI.post('customers', {
+        name,
+        phone: $('customer-phone')?.value.trim() || '',
+        notes: $('customer-notes')?.value.trim() || ''
+      });
+      closeCustomerDialog();
+      await renderCustomers();
+      $('order-customer').value = customer.id;
+      showCustomerInfo();
+    } catch (error) {
+      alert(error.message || 'Could not save customer.');
+    }
   }
 
-  $("order-customer")?.addEventListener("change", showCustomerInfo);
-  $("add-customer-from-order")?.addEventListener("click", openCustomerDialog);
-  $("customerForm")?.addEventListener("submit", addCustomer);
-  $("cancelCustomer")?.addEventListener("click", closeCustomerDialog);
-  $("cancelCustomerX")?.addEventListener("click", closeCustomerDialog);
-  $("customerDialog")?.addEventListener("click", (event) => {
-    if (event.target === $("customerDialog")) closeCustomerDialog();
+  $('order-customer')?.addEventListener('change', showCustomerInfo);
+  $('add-customer-from-order')?.addEventListener('click', openCustomerDialog);
+  $('customerForm')?.addEventListener('submit', addCustomer);
+  $('cancelCustomer')?.addEventListener('click', closeCustomerDialog);
+  $('cancelCustomerX')?.addEventListener('click', closeCustomerDialog);
+  $('customerDialog')?.addEventListener('click', (event) => {
+    if (event.target === $('customerDialog')) closeCustomerDialog();
   });
 
-  window.getSelectedCustomerId = () => $("order-customer")?.value || "";
-  window.getSelectedCustomer = getSelectedCustomer;
+  window.getSelectedCustomerId = () => $('order-customer')?.value || '';
+  window.getSelectedCustomer = () => {
+    const id = $('order-customer')?.value || '';
+    if (!id) return null;
+    const option = $('order-customer')?.selectedOptions?.[0];
+    return { id, name: option?.textContent?.split(' — ')[0] || 'Walk-in / No customer' };
+  };
   window.renderOrderCustomers = renderCustomers;
   renderCustomers();
 })();
+
 
 /* Full bilingual UI — translates the entire visible interface between Hebrew and English. */
 (function () {
@@ -1047,7 +1222,7 @@ function hasDuplicateProduct(data, candidate, currentId = "") {
     'Qty': 'Qty', 'Change': 'Change', 'Reason': 'Reason', 'Subtotal': 'Subtotal', 'Total': 'Total', 'Profit': 'Profit',
     'Quantity': 'Quantity', 'Accessories': 'Accessories', 'Cigarettes': 'Cigarettes', 'Tobacco': 'Tobacco', 'Cigars': 'Cigars',
     'Rolling Tobacco': 'Rolling Tobacco', 'Shisha / Molasses': 'Shisha / Molasses', 'Hookah / Argileh': 'Hookah / Argileh', 'Other': 'Other',
-    'Argileh / Hookah': 'Argileh / Hookah', 'Price for this order': 'Price for this order', 'No orders yet.': 'No orders yet.', 'All products are above minimum stock.': 'All products are above minimum stock.',
+    'Argileh / Hookah': 'Argileh / Hookah', 'No orders yet.': 'No orders yet.', 'All products are above minimum stock.': 'All products are above minimum stock.',
     'No products found.': 'No products found.', 'products': 'products', 'left': 'left', 'orders': 'orders'
   };
   const EN_HE = Object.fromEntries(Object.entries(HE_EN).map(([he, en]) => [en, he]));
@@ -1112,3 +1287,6 @@ function hasDuplicateProduct(data, candidate, currentId = "") {
   }
   translateAll(localStorage.getItem('cigarette_shop_language') || 'he');
 })();
+
+
+document.addEventListener('change', (event) => { if (event.target?.id === 'profitMonth' || event.target?.id === 'profitDays') renderDailyProfit(); });
