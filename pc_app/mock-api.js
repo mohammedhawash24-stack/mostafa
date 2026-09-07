@@ -70,7 +70,7 @@ const MockAPI = (() => {
 
   async function get(resource) {
     if (resource === 'products') {
-      const { data, error } = await supabase.from('products').select('*').order('name');
+      const { data, error } = await window.supabaseClient.from('products').select('*').order('name');
       if (error) throw error;
       return data.map(mapProduct);
     }
@@ -92,17 +92,17 @@ const MockAPI = (() => {
       return data.map((row) => ({ ...mapMovement(row), productName: row.products?.name || mapMovement(row).productName }));
     }
     if (resource === 'customers') {
-      const { data, error } = await supabase.from('customers').select('*').order('name');
+      const { data, error } = await window.supabaseClient.from('customers').select('*').order('name');
       if (error) throw error;
       return data.map(mapCustomer);
     }
     if (resource === 'payments') {
-      const { data, error } = await supabase.from('customer_payments').select('*').order('paid_at', { ascending: false });
+      const { data, error } = await window.supabaseClient.from('customer_payments').select('*').order('paid_at', { ascending: false });
       if (error) throw error;
       return data.map((row) => ({ id: row.id, customerId: row.customer_id, amount: Number(row.amount || 0), date: row.paid_at, note: row.note || '' }));
     }
     if (resource === 'suppliers') {
-      const { data, error } = await supabase.from('suppliers').select('*').order('name');
+      const { data, error } = await window.supabaseClient.from('suppliers').select('*').order('name');
       if (error) throw error;
       return data;
     }
@@ -133,22 +133,22 @@ const MockAPI = (() => {
         min_qty: Number(body.min || 0),
         image_url: body.image || null
       };
-      const { data, error } = await supabase.from('products').insert(payload).select().single();
+      const { data, error } = await window.supabaseClient.from('products').insert(payload).select().single();
       if (error) throw error;
       return mapProduct(data);
     }
     if (resource === 'payments') {
-      const { data, error } = await supabase.from('customer_payments').insert({
+      const { data, error } = await window.supabaseClient.from('customer_payments').insert({
         customer_id: body.customerId,
         amount: Number(body.amount || 0),
         note: body.note || null,
-        created_by: (await supabase.auth.getUser()).data.user?.id || null
+        created_by: (await window.supabaseClient.auth.getUser()).data.user?.id || null
       }).select().single();
       if (error) throw error;
       return { id: data.id, customerId: data.customer_id, amount: Number(data.amount || 0), date: data.paid_at, note: data.note || '' };
     }
     if (resource === 'customers') {
-      const { data, error } = await supabase.from('customers').insert({
+      const { data, error } = await window.supabaseClient.from('customers').insert({
         name: body.name,
         phone: body.phone || null,
         notes: body.notes || null
@@ -173,14 +173,14 @@ const MockAPI = (() => {
       min_qty: Number(body.min || 0),
       image_url: body.image || null
     };
-    const { data, error } = await supabase.from('products').update(payload).eq('id', id).select().single();
+    const { data, error } = await window.supabaseClient.from('products').update(payload).eq('id', id).select().single();
     if (error) throw error;
     return mapProduct(data);
   }
 
   async function remove(resource, id) {
     if (resource !== 'products') throw new Error(`Unsupported delete operation: ${resource}`);
-    const { error } = await supabase.from('products').delete().eq('id', id);
+    const { error } = await window.supabaseClient.from('products').delete().eq('id', id);
     if (error) throw error;
     return { ok: true };
   }
@@ -196,7 +196,7 @@ const MockAPI = (() => {
       .from('products').update({ qty: nextQty }).eq('id', id).select().single();
     if (updateError) throw updateError;
 
-    const { error: movementError } = await supabase.from('stock_movements').insert({
+    const { error: movementError } = await window.supabaseClient.from('stock_movements').insert({
       product_id: id,
       movement_type: Number(quantity) >= 0 ? 'purchase' : 'adjustment',
       quantity: Number(quantity),
@@ -214,7 +214,7 @@ const MockAPI = (() => {
       sold_price: Number(item.sell)
     }));
 
-    const { data: orderNumber, error } = await supabase.rpc('complete_order', {
+    const { data: orderNumber, error } = await window.supabaseClient.rpc('complete_order', {
       p_customer_id: order.customerId || null,
       p_customer_name: order.customerName || 'Walk-in / No customer',
       p_discount: Number(order.discount || 0),
@@ -248,19 +248,19 @@ const MockAPI = (() => {
   }
 
   async function login(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
     if (error || !data.session) return false;
     const { data: profile, error: profileError } = await supabase
       .from('profiles').select('role').eq('id', data.user.id).single();
     if (profileError || profile?.role !== 'admin') {
-      await supabase.auth.signOut();
+      await window.supabaseClient.auth.signOut();
       return false;
     }
     return true;
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    await window.supabaseClient.auth.signOut();
   }
 
   return {

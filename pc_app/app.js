@@ -814,7 +814,7 @@ function init() {
   $('backupImport')?.addEventListener('click', () => $('backupFile')?.click());
   $('backupFile')?.addEventListener('change', importBackup);
 
-  supabase.auth.getSession().then(async ({ data }) => {
+  window.supabaseClient.auth.getSession().then(async ({ data }) => {
     if (data.session) {
       sessionStorage.setItem(AUTH_KEY, '1');
       await showApp();
