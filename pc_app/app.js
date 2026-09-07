@@ -814,14 +814,16 @@ function init() {
   $('backupImport')?.addEventListener('click', () => $('backupFile')?.click());
   $('backupFile')?.addEventListener('change', importBackup);
 
-  window.supabaseClient.auth.getSession().then(async ({ data }) => {
-    if (data.session) {
-      sessionStorage.setItem(AUTH_KEY, '1');
-      await showApp();
-    } else {
-      sessionStorage.removeItem(AUTH_KEY);
-    }
-  }).catch(() => {});
+  if (window.supabaseClient?.auth) {
+    window.supabaseClient.auth.getSession().then(async ({ data }) => {
+      if (data.session) {
+        sessionStorage.setItem(AUTH_KEY, '1');
+        await showApp();
+      } else {
+        sessionStorage.removeItem(AUTH_KEY);
+      }
+    }).catch(() => {});
+  }
 }
 
 // Backup & Restore — saves the app's local data into a portable JSON file.
