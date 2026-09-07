@@ -75,7 +75,7 @@ const MockAPI = (() => {
       return data.map(mapProduct);
     }
     if (resource === 'orders') {
-      const { data, error } = await window.supabaseClient
+      const { data, error } = await supabase
         .from('orders')
         .select('*, order_items(*)')
         .order('created_at', { ascending: false });
@@ -83,7 +83,7 @@ const MockAPI = (() => {
       return data.map(mapOrder);
     }
     if (resource === 'stockMovements') {
-      const { data, error } = await window.supabaseClient
+      const { data, error } = await supabase
         .from('stock_movements')
         .select('*, products(name)')
         .order('created_at', { ascending: false })
@@ -107,7 +107,7 @@ const MockAPI = (() => {
       return data;
     }
     if (resource === 'lastReceipt') {
-      const { data, error } = await window.supabaseClient
+      const { data, error } = await supabase
         .from('orders')
         .select('*, order_items(*)')
         .order('created_at', { ascending: false })
@@ -186,13 +186,13 @@ const MockAPI = (() => {
   }
 
   async function patchProductStock(id, quantity, reason = 'Manual adjustment') {
-    const { data: product, error: productError } = await window.supabaseClient
+    const { data: product, error: productError } = await supabase
       .from('products').select('*').eq('id', id).single();
     if (productError) throw productError;
     const nextQty = Number(product.qty || 0) + Number(quantity || 0);
     if (nextQty < 0) throw new Error('Not enough stock');
 
-    const { data: updated, error: updateError } = await window.supabaseClient
+    const { data: updated, error: updateError } = await supabase
       .from('products').update({ qty: nextQty }).eq('id', id).select().single();
     if (updateError) throw updateError;
 
@@ -248,11 +248,7 @@ const MockAPI = (() => {
   }
 
   async function login(email, password) {
-    const client = window.supabaseClient;
-    if (!client || !client.auth || typeof client.auth.signInWithPassword !== 'function') {
-      throw new Error('Supabase is not connected. Refresh the page and make sure you are online.');
-    }
-    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
     if (error || !data.session) return false;
     const { data: profile, error: profileError } = await window.supabaseClient
       .from('profiles').select('role').eq('id', data.user.id).single();
